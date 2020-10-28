@@ -8,9 +8,13 @@ import numpy as np
 from tf_geometric.data.dataset import DownloadableDataset
 import json
 
+from tf_kge.data.indexer import Indexer
+from tf_kge.data.kg import KG
+
+
 class CommonDataset(DownloadableDataset):
 
-    def _read_id_index_info(self, id_index_path):
+    def _read_indexer(self, id_index_path) -> Indexer:
         print("reading id_index_info: ", id_index_path)
         id_index_dict = {}
         index_id_dict = {}
@@ -25,9 +29,9 @@ class CommonDataset(DownloadableDataset):
 
                 id_index_dict[id] = index
                 index_id_dict[index] = id
-        return id_index_dict, index_id_dict
+        return Indexer(id_index_dict, index_id_dict)
 
-    def _read_triples(self, triple_path, entity_id_index_dict, relation_id_index_dict):
+    def _read_triples(self, triple_path, entity_indexer: Indexer, relation_indexer: Indexer) -> KG:
         triples = []
         print("reading triples: ", triple_path)
         with open(triple_path, "r", encoding="utf-8") as f:
@@ -37,16 +41,16 @@ class CommonDataset(DownloadableDataset):
                     continue
                 head_entity_id, tail_entity_id, relation_id = line.split()
                 triple = [
-                    entity_id_index_dict[head_entity_id],
-                    relation_id_index_dict[relation_id],
-                    entity_id_index_dict[tail_entity_id]
+                    entity_indexer.id_index_dict[head_entity_id],
+                    relation_indexer.id_index_dict[relation_id],
+                    entity_indexer.id_index_dict[tail_entity_id]
                 ]
                 triples.append(triple)
         triples = np.array(triples)
         heads = triples[:, 0]
         relations = triples[:, 1]
         tails = triples[:, 2]
-        return heads, relations, tails
+        return KG(heads, relations, tails, entity_indexer, relation_indexer)
 
     def process(self):
 
@@ -59,16 +63,12 @@ class CommonDataset(DownloadableDataset):
         entity_path = os.path.join(data_dir, "entity2id.txt")
         relation_path = os.path.join(data_dir, "relation2id.txt")
 
+        entity_indexer = self._read_indexer(entity_path)
+        relation_indexer = self._read_indexer(relation_path)
 
-        entity_id_index_dict, entity_index_id_dict = self._read_id_index_info(entity_path)
-        relation_id_index_dict, relation_index_id_dict = self._read_id_index_info(relation_path)
+        train_kg = self._read_triples(train_triple_path, entity_indexer, relation_indexer)
+        test_kg = self._read_triples(test_triple_path, entity_indexer, relation_indexer)
+        valid_kg = self._read_triples(valid_triple_path, entity_indexer, relation_indexer)
 
-        train_heads, train_relations, train_tails = self._read_triples(train_triple_path, entity_id_index_dict, relation_id_index_dict)
-        test_heads, test_relations, test_tails = self._read_triples(test_triple_path, entity_id_index_dict, relation_id_index_dict)
-        valid_heads, valid_relations, valid_tails = self._read_triples(valid_triple_path, entity_id_index_dict, relation_id_index_dict)
+        return train_kg, test_kg, valid_kg, entity_indexer, relation_indexer
 
-        return (entity_id_index_dict, entity_index_id_dict), \
-               (relation_id_index_dict, relation_index_id_dict), \
-               (train_heads, train_relations, train_tails), \
-               (test_heads, test_relations, test_tails), \
-               (valid_heads, valid_relations, valid_tails)
