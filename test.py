@@ -1,6 +1,9 @@
 # coding=utf-8
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+from tf_kge.model.transe import TransE
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import tf_kge
 
 from tqdm import tqdm
@@ -17,9 +20,6 @@ train_batch_size = 5000
 test_batch_size = 100
 
 
-entity_embeddings = tf.Variable(tf.random.truncated_normal([train_kg.num_entities, embedding_size], stddev=np.sqrt(1 / embedding_size)))
-relation_embeddings = tf.Variable(tf.random.truncated_normal([train_kg.num_relations, embedding_size], stddev=np.sqrt(1 / embedding_size)))
-
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=1e-2)
 
@@ -28,6 +28,8 @@ def compute_distance(a, b):
     # return tf.reduce_sum((a - b) ** 2, axis=-1)
     return tf.reduce_sum(tf.abs(a - b), axis=-1)
 
+
+model = TransE(train_kg.num_entities, train_kg.num_relations, embedding_size)
 
 for epoch in range(10000):
 
@@ -44,23 +46,14 @@ for epoch in range(10000):
 
             batch_neg_target = entity_negative_sampling(batch_source, batch_r, kg=train_kg, target_entity_type=target_entity_type, filtered=True)
 
-            normed_entity_embeddings = tf.math.l2_normalize(entity_embeddings, axis=-1)
-            normed_relation_embeddings = tf.math.l2_normalize(relation_embeddings, axis=-1)
+            translated = model([batch_source, batch_target], target_entity_type=target_entity_type)
+            embedded_target = model.embed_norm_entities(batch_target)
+            embedded_neg_target = model.embed_norm_entities(batch_neg_target)
 
-            embedded_source = tf.nn.embedding_lookup(normed_entity_embeddings, batch_source)
-            embedded_r = tf.nn.embedding_lookup(normed_relation_embeddings, batch_r)
-            embedded_target = tf.nn.embedding_lookup(normed_entity_embeddings, batch_target)
-            embedded_neg_target = tf.nn.embedding_lookup(normed_entity_embeddings, batch_neg_target)
+            pos_dis = compute_distance(translated, embedded_target)
+            neg_dis = compute_distance(translated, embedded_neg_target)
 
-            if target_entity_type == "tail":
-                translated = embedded_source + embedded_r
-            else:
-                translated = embedded_source - embedded_r
-
-
-            losses = tf.maximum(
-                margin + compute_distance(translated, embedded_target) - compute_distance(translated, embedded_neg_target), 0.0)
-
+            losses = tf.maximum(margin + pos_dis - neg_dis, 0.0)
             loss = tf.reduce_mean(losses)
 
         vars = tape.watched_variables()
@@ -72,8 +65,7 @@ for epoch in range(10000):
 
     if epoch % 10 == 0:
 
-        normed_entity_embeddings = tf.math.l2_normalize(entity_embeddings, axis=-1)
-        normed_relation_embeddings = tf.math.l2_normalize(relation_embeddings, axis=-1)
+        normed_entity_embeddings = tf.math.l2_normalize(model.entity_embeddings, axis=-1)
 
         for target_entity_type in ["head", "tail"]:
             mean_ranks = []
@@ -86,17 +78,10 @@ for epoch in range(10000):
                     batch_source = batch_t
                     batch_target = batch_h
 
-                embedded_source = tf.nn.embedding_lookup(normed_entity_embeddings, batch_source)
-                embedded_r = tf.nn.embedding_lookup(normed_relation_embeddings, batch_r)
-
-                if target_entity_type == "tail":
-                    translated = embedded_source + embedded_r
-                else:
-                    translated = embedded_source - embedded_r
+                translated = model([batch_source, batch_target], target_entity_type=target_entity_type)
 
                 tiled_entity_embeddings = tf.tile(tf.expand_dims(normed_entity_embeddings, axis=0), [batch_h.shape[0], 1, 1])
                 tiled_translated = tf.tile(tf.expand_dims(translated, axis=1), [1, normed_entity_embeddings.shape[0], 1])
-
                 dis = compute_distance(tiled_translated, tiled_entity_embeddings)
 
                 ranks = tf.argsort(tf.argsort(dis, axis=1), axis=1).numpy()
