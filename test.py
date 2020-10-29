@@ -44,10 +44,13 @@ for epoch in range(10000):
 
             batch_neg_target = entity_negative_sampling(batch_source, batch_r, kg=train_kg, target_entity_type=target_entity_type, filtered=True)
 
-            embedded_source = tf.nn.embedding_lookup(entity_embeddings, batch_source)
-            embedded_r = tf.nn.embedding_lookup(relation_embeddings, batch_r)
-            embedded_target = tf.nn.embedding_lookup(entity_embeddings, batch_target)
-            embedded_neg_target = tf.nn.embedding_lookup(entity_embeddings, batch_neg_target)
+            normed_entity_embeddings = tf.math.l2_normalize(entity_embeddings, axis=-1)
+            normed_relation_embeddings = tf.math.l2_normalize(relation_embeddings, axis=-1)
+
+            embedded_source = tf.nn.embedding_lookup(normed_entity_embeddings, batch_source)
+            embedded_r = tf.nn.embedding_lookup(normed_relation_embeddings, batch_r)
+            embedded_target = tf.nn.embedding_lookup(normed_entity_embeddings, batch_target)
+            embedded_neg_target = tf.nn.embedding_lookup(normed_entity_embeddings, batch_neg_target)
 
             if target_entity_type == "tail":
                 translated = embedded_source + embedded_r
@@ -67,28 +70,40 @@ for epoch in range(10000):
         if step % 200 == 0:
             print("epoch = {}\tstep = {}\tloss = {}".format(epoch, step, loss))
 
-
-    mean_ranks = []
-    for test_step, (batch_h, batch_r, batch_t) in enumerate(tf.data.Dataset.from_tensor_slices((test_kg.h, test_kg.r, test_kg.t)).batch(test_batch_size)):
-        batch_source = batch_h
-        batch_target = batch_t
-
-        embedded_source = tf.nn.embedding_lookup(entity_embeddings, batch_source)
-        embedded_r = tf.nn.embedding_lookup(relation_embeddings, batch_r)
-        # embedded_target = tf.nn.embedding_lookup(entity_embeddings, batch_target)
-
-        translated = embedded_source + embedded_r
-
-        tiled_entity_embeddings = tf.tile(tf.expand_dims(entity_embeddings, axis=0), [batch_h.shape[0], 1, 1])
-        tiled_translated = tf.tile(tf.expand_dims(translated, axis=1), [1, entity_embeddings.shape[0], 1])
-
-        dis = compute_distance(tiled_translated, tiled_entity_embeddings)
-
-        ranks = tf.argsort(tf.argsort(dis, axis=1), axis=1).numpy()
-        target_ranks = ranks[np.arange(len(batch_target)), batch_target.numpy()]
-        mean_ranks.extend(target_ranks)
     if epoch % 10 == 0:
-        print("epoch = {}\tmean_rank = {}".format(epoch, np.mean(mean_ranks)))
+
+        normed_entity_embeddings = tf.math.l2_normalize(entity_embeddings, axis=-1)
+        normed_relation_embeddings = tf.math.l2_normalize(relation_embeddings, axis=-1)
+
+        for target_entity_type in ["head", "tail"]:
+            mean_ranks = []
+            for test_step, (batch_h, batch_r, batch_t) in enumerate(tf.data.Dataset.from_tensor_slices((test_kg.h, test_kg.r, test_kg.t)).batch(test_batch_size)):
+
+                if target_entity_type == "tail":
+                    batch_source = batch_h
+                    batch_target = batch_t
+                else:
+                    batch_source = batch_t
+                    batch_target = batch_h
+
+                embedded_source = tf.nn.embedding_lookup(normed_entity_embeddings, batch_source)
+                embedded_r = tf.nn.embedding_lookup(normed_relation_embeddings, batch_r)
+
+                if target_entity_type == "tail":
+                    translated = embedded_source + embedded_r
+                else:
+                    translated = embedded_source - embedded_r
+
+                tiled_entity_embeddings = tf.tile(tf.expand_dims(normed_entity_embeddings, axis=0), [batch_h.shape[0], 1, 1])
+                tiled_translated = tf.tile(tf.expand_dims(translated, axis=1), [1, normed_entity_embeddings.shape[0], 1])
+
+                dis = compute_distance(tiled_translated, tiled_entity_embeddings)
+
+                ranks = tf.argsort(tf.argsort(dis, axis=1), axis=1).numpy()
+                target_ranks = ranks[np.arange(len(batch_target)), batch_target.numpy()]
+                mean_ranks.extend(target_ranks)
+
+            print("epoch = {}\ttarget_entity_type = {}\tmean_rank = {}".format(epoch, target_entity_type, np.mean(mean_ranks)))
 
 
 
