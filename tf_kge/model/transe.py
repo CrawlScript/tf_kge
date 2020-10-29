@@ -15,23 +15,42 @@ class TransE(tf.keras.Model):
             tf.random.truncated_normal([num_relations, embedding_size], stddev=np.sqrt(1 / embedding_size))
         )
 
-    def embed_norm(self, embeddings, indices, norm=True):
-        embedded = tf.nn.embedding_lookup(embeddings, indices)
-        if norm:
-            embedded = tf.math.l2_normalize(embedded, axis=-1)
-        return embedded
+    def embed_norm(self, embeddings, indices):
 
-    def embed_norm_entities(self, entities, norm=True):
-        return self.embed_norm(self.entity_embeddings, entities, norm=norm)
+        # if embedding table is smaller, normalizing first is more efficient
+        norm_first = embeddings.shape[0] < len(indices)
 
-    def embed_norm_relations(self, relations, norm=True):
-        return self.embed_norm(self.relation_embeddings, relations, norm=norm)
+        if norm_first:
+            h = tf.math.l2_normalize(embeddings, axis=-1)
+        else:
+            h = embeddings
+
+        h = tf.nn.embedding_lookup(h, indices)
+
+        if not norm_first:
+            h = tf.math.l2_normalize(h, axis=-1)
+
+        return h
+
+    def embed_norm_entities(self, entities):
+        return self.embed_norm(self.entity_embeddings, entities)
+
+    def embed_norm_relations(self, relations):
+        return self.embed_norm(self.relation_embeddings, relations)
 
     def call(self, inputs, target_entity_type, training=None, mask=None):
-        batch_source, batch_r = inputs
+        """
 
-        embedded_source = self.embed_norm_entities(batch_source)
-        embedded_r = self.embed_norm_relations(batch_r)
+        :param inputs: [source_entities, relations]
+        :param target_entity_type: "head" | "tail"
+        :param training:
+        :param mask:
+        :return:
+        """
+        source, r = inputs
+
+        embedded_source = self.embed_norm_entities(source)
+        embedded_r = self.embed_norm_relations(r)
 
         if target_entity_type == "tail":
             translated = embedded_source + embedded_r

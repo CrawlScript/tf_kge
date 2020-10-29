@@ -5,6 +5,7 @@ __pycache__/
 
 /.idea/
 /data/
+/demo/data/
 
 # C extensions
 *.so
