@@ -3,7 +3,7 @@ import os
 
 from tf_kge.model.transe import TransE
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import tf_kge
 
 from tqdm import tqdm
