@@ -3,7 +3,7 @@ import os
 
 from tf_kge.model.transe import TransE
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import tf_kge
 
 from tqdm import tqdm
@@ -16,7 +16,7 @@ train_kg, test_kg, valid_kg, entity_indexer, relation_indexer = WN18Dataset().lo
 
 embedding_size = 20
 margin = 2.0
-train_batch_size = 5000
+train_batch_size = 8000
 test_batch_size = 100
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=1e-2)
@@ -47,7 +47,7 @@ for epoch in range(10000):
             batch_neg_target = entity_negative_sampling(batch_source, batch_r, kg=train_kg,
                                                         target_entity_type=target_entity_type, filtered=True)
 
-            translated = model([batch_source, batch_target], target_entity_type=target_entity_type)
+            translated = model([batch_source, batch_r], target_entity_type=target_entity_type)
             embedded_target = model.embed_norm_entities(batch_target)
             embedded_neg_target = model.embed_norm_entities(batch_neg_target)
 
@@ -80,7 +80,7 @@ for epoch in range(10000):
                     batch_source = batch_t
                     batch_target = batch_h
 
-                translated = model([batch_source, batch_target], target_entity_type=target_entity_type)
+                translated = model([batch_source, batch_r], target_entity_type=target_entity_type)
 
                 tiled_entity_embeddings = tf.tile(tf.expand_dims(normed_entity_embeddings, axis=0),
                                                   [batch_h.shape[0], 1, 1])
