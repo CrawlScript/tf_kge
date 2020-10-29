@@ -1,4 +1,5 @@
 # coding=utf-8
+from typing import Tuple
 
 import numpy as np
 import os
@@ -52,7 +53,7 @@ class CommonDataset(DownloadableDataset):
         tails = triples[:, 2]
         return KG(heads, relations, tails, entity_indexer, relation_indexer)
 
-    def process(self):
+    def process(self) -> Tuple[KG, KG, KG, Indexer, Indexer]:
 
         data_dir = os.path.join(self.raw_root_path, self.dataset_name)
 

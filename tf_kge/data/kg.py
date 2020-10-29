@@ -3,17 +3,17 @@
 from tqdm import tqdm
 
 class KG(object):
-    def __init__(self, heads, relations, tails,
+    def __init__(self, h, r, t,
                  entity_indexer, relation_indexer):
-        self.heads = heads
-        self.relations = relations
-        self.tails = tails
+        self.h = h
+        self.r = r
+        self.t = t
 
         self.entity_indexer = entity_indexer
         self.relation_indexer = relation_indexer
 
-        self.head_relation_tail_dict = self.build_triple_dict(heads, relations, tails)
-        self.tail_relation_head_dict = self.build_triple_dict(tails, relations, heads)
+        self.head_relation_tail_dict = self.build_triple_dict(h, r, t)
+        self.tail_relation_head_dict = self.build_triple_dict(t, r, h)
 
     def build_triple_dict(self, source_entities, relations, target):
         source_relation_target_dict = {}
@@ -46,7 +46,7 @@ class KG(object):
 
     @property
     def num_triples(self):
-        return len(self.heads)
+        return len(self.h)
 
     def __str__(self):
         return "KG: entities => {}\trelations => {} triples => {}".format(self.num_entities, self.num_relations, self.num_triples)
